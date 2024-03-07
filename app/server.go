@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"regexp"
+	"strings"
 )
 
 func main() {
@@ -33,14 +35,32 @@ func main() {
 }
 
 func handleRequest(c net.Conn) {
-	readByte := make([]byte, 100)
-
 	for {
-		_, err := c.Read(readByte)
+		buf := make([]byte, 1024)
+		_, err := c.Read(buf)
+
 		if err != nil {
 			fmt.Println("Error Reading: ", err.Error())
 			os.Exit(1)
 		}
-		c.Write([]byte("+PONG\r\n"))
+
+		pattern := regexp.MustCompile(`(\*\d+\r?\n\$\d+\r\n)|(\r?\n\$\d+\r\n)|(\r\n)`)
+		command := strings.Fields(strings.Join(pattern.Split(string(buf), -1), " "))
+
+		switch command[0] {
+		case "ping":
+			msg := "+PONG\r\n"
+			_, err := c.Write([]byte(msg))
+			if err != nil {
+				fmt.Println("Error writing to connection: ", err.Error())
+				os.Exit(1)
+			}
+		case "echo":
+			_, err := c.Write([]byte("+" + command[1] + "\r\n"))
+			if err != nil {
+				fmt.Println("Error writing to connection: ", err.Error())
+				os.Exit(1)
+			}
+		}
 	}
 }
