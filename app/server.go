@@ -22,10 +22,18 @@ func main() {
 	}
 	defer tcpConn.Close()
 
-	var res = []byte("+PONG\r\n")
-	_, err = tcpConn.Write(res)
-	if err != nil {
-		fmt.Println("Error writing to connection: ", err.Error())
-		os.Exit(1)
+	for {
+		buf := make([]byte, 1024)
+		_, err := tcpConn.Read(buf)
+		if err != nil {
+			fmt.Println("Error reading:", err.Error())
+			return
+		} else {
+			_, err := tcpConn.Write([]byte("+PONG\r\n"))
+			if err != nil {
+				fmt.Println("Error writing to connection: ", err.Error())
+				os.Exit(1)
+			}
+		}
 	}
 }
