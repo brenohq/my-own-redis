@@ -18,6 +18,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	storage := make(map[string]string)
+
 	for {
 		connection, err := l.Accept()
 
@@ -26,11 +28,11 @@ func main() {
 			os.Exit(1)
 		}
 
-		go handleRequest(connection)
+		go handleRequest(connection, storage)
 	}
 }
 
-func handleRequest(connection net.Conn) {
+func handleRequest(connection net.Conn, storage map[string]string) {
 	defer connection.Close()
 
 	for {
@@ -48,11 +50,20 @@ func handleRequest(connection net.Conn) {
 		fmt.Println(command)
 		fmt.Println("---------------------------------")
 
+		var response []byte
+
 		switch strings.ToLower(command[2]) {
 		case "echo":
-			connection.Write([]byte("$" + strconv.Itoa(len(command[4])) + "\r\n" + string(strings.Join(command[4:], "\r\n"))))
+			response = []byte("$" + strconv.Itoa(len(command[4])) + "\r\n" + string(strings.Join(command[4:], "\r\n")))
+		case "set":
+			storage[command[4]] = command[6]
+			response = []byte("+OK\r\n")
+		case "get":
+			response = []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(storage[command[4]]), storage[command[4]]))
 		default:
-			connection.Write([]byte("+PONG\r\n"))
+			response = []byte("+PONG\r\n")
 		}
+
+		connection.Write(response)
 	}
 }
