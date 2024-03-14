@@ -2,15 +2,26 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
+
+const MAX_BYTE_SIZE = 512
+
+type Value struct {
+	value        string
+	expiry_after int64
+	created_at   int64
+}
+
+var storage = make(map[string]Value)
 
 func main() {
 	fmt.Println("Logs from your program will appear here!")
-
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 
 	if err != nil {
@@ -18,52 +29,83 @@ func main() {
 		os.Exit(1)
 	}
 
-	storage := make(map[string]string)
+	defer l.Close()
 
 	for {
 		connection, err := l.Accept()
 
 		if err != nil {
-			fmt.Println("Error accepting connection: ", err.Error())
-			os.Exit(1)
+			fmt.Print("Error accepting connection: ", err.Error())
+			continue
 		}
 
-		go handleRequest(connection, storage)
+		go handleRequest(connection)
 	}
 }
 
-func handleRequest(connection net.Conn, storage map[string]string) {
+func handleRequest(connection net.Conn) {
 	defer connection.Close()
 
+	tmp := make([]byte, MAX_BYTE_SIZE)
+
 	for {
-		command_byte := make([]byte, 1024)
-		command_length, err := connection.Read(command_byte)
+		lenght, err := connection.Read(tmp)
 
 		if err != nil {
-			fmt.Println("Error reading the request buffer", err)
-			return
+			if err != io.EOF {
+				fmt.Println("read error:", err)
+			}
+			break
 		}
 
-		command := strings.Split(string(command_byte[:command_length]), "\r\n")
+		input := string(tmp[:lenght])
+		inputs := strings.Split(input, "\r\n")
+		command, rest := inputs[2], inputs[3:]
 
-		fmt.Println("---------------------------------")
-		fmt.Println(command)
-		fmt.Println("---------------------------------")
+		switch lower_command := strings.ToLower(command); lower_command {
+		case "ping":
+			connection.Write([]byte("+PONG\r\n"))
 
-		var response []byte
-
-		switch strings.ToLower(command[2]) {
 		case "echo":
-			response = []byte("$" + strconv.Itoa(len(command[4])) + "\r\n" + string(strings.Join(command[4:], "\r\n")))
-		case "set":
-			storage[command[4]] = command[6]
-			response = []byte("+OK\r\n")
-		case "get":
-			response = []byte(fmt.Sprintf("$%d\r\n%s\r\n", len(storage[command[4]]), storage[command[4]]))
-		default:
-			response = []byte("+PONG\r\n")
-		}
+			echo := rest[1]
+			fmt.Fprintf(connection, "$%d\r\n%s\r\n", len(echo), echo)
 
-		connection.Write(response)
+		case "set":
+			fmt.Println("SET")
+			key, value := rest[1], rest[3]
+			temp_value := Value{value: value}
+
+			fmt.Println(value)
+			fmt.Println(rest)
+
+			if len(rest) >= 6 {
+				if expiry_after, err := strconv.Atoi(rest[7]); err == nil {
+					fmt.Println(expiry_after)
+					temp_value.expiry_after = int64(expiry_after)
+				}
+			} else {
+				temp_value.expiry_after = -1
+			}
+
+			connection.Write([]byte("+OK\r\n"))
+			now := time.Now()
+			temp_value.created_at = now.UnixMilli()
+			storage[(key)] = temp_value
+
+		case "get":
+			now := time.Now()
+			fmt.Println("GET")
+			key := rest[1]
+			value := storage[(key)]
+
+			fmt.Print(value.expiry_after)
+			fmt.Println((now.UnixMilli() - value.created_at))
+
+			if value.expiry_after < 0 || ((now.UnixMilli() - value.created_at) < value.expiry_after) {
+				fmt.Fprintf(connection, "$%d\r\n%s\r\n", len(value.value), value.value)
+			} else {
+				fmt.Fprint(connection, "$-1\r\n")
+			}
+		}
 	}
 }
