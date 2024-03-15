@@ -113,6 +113,20 @@ func handleRequest(connection net.Conn) {
 			} else {
 				fmt.Fprint(connection, "$-1\r\n")
 			}
+
+		case "info":
+			var section string
+
+			if len(rest) > 1 {
+				section = rest[1]
+			} else {
+				section = "replication"
+			}
+
+			if section == "replication" {
+				response := "role:master"
+				connection.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(response), response)))
+			}
 		}
 	}
 }
