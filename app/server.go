@@ -22,11 +22,13 @@ type Value struct {
 
 var storage = make(map[string]Value)
 var port int
+var replicaOf string
 
 func main() {
 	fmt.Println("Logs from your program will appear here!")
 
 	flag.IntVar(&port, "port", DEFAULT_PORT, "Flag used to set which port of this redis instance will run.")
+	flag.StringVar(&replicaOf, "replicaof", "", "Port of master instance which the replica is slave to.")
 	flag.Parse()
 
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
@@ -46,11 +48,11 @@ func main() {
 			continue
 		}
 
-		go handleRequest(connection)
+		go handleRequest(connection, replicaOf)
 	}
 }
 
-func handleRequest(connection net.Conn) {
+func handleRequest(connection net.Conn, replicaOf string) {
 	defer connection.Close()
 
 	tmp := make([]byte, MAX_BYTE_SIZE)
@@ -124,7 +126,16 @@ func handleRequest(connection net.Conn) {
 			}
 
 			if section == "replication" {
-				response := "role:master"
+				var role string
+
+				if replicaOf != "" {
+					role = "slave"
+				} else {
+					role = "master"
+				}
+
+				response := fmt.Sprintf("role:%s", role)
+
 				connection.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(response), response)))
 			}
 		}
