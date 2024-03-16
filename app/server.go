@@ -23,6 +23,8 @@ type Value struct {
 var storage = make(map[string]Value)
 var port int
 var replicaOf string
+var replicaId string
+var replicaOffset int
 
 func main() {
 	fmt.Println("Logs from your program will appear here!")
@@ -127,6 +129,7 @@ func handleRequest(connection net.Conn, replicaOf string) {
 
 			if section == "replication" {
 				var role string
+				var response string
 
 				if replicaOf != "" {
 					role = "slave"
@@ -134,7 +137,15 @@ func handleRequest(connection net.Conn, replicaOf string) {
 					role = "master"
 				}
 
-				response := fmt.Sprintf("role:%s", role)
+				replicaId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
+				replicaOffset = 0
+
+				response = fmt.Sprintf("role:%s", role)
+
+				if role == "master" {
+					response += fmt.Sprintf("\nmaster_replid:%s", replicaId)
+					response += fmt.Sprintf("\nmaster_repl_offset:%d", replicaOffset)
+				}
 
 				connection.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(response), response)))
 			}
